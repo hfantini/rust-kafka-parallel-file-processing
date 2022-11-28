@@ -1,2 +1,6 @@
-# rust_kafka_parallel_file_processing
- 
+# PARALLEL FILE PROCESSING
+### STUDY (RUST + APACHE KAFKA)
+
+Creation Date: NOVEMBER/2022
+
+<br/>

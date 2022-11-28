@@ -1,0 +1,13 @@
+[package]
+name = "crawler"
+version = "0.1.0"
+edition = "2021"
+
+[env]
+RUST_LOG = { value = "crawler=info" }
+
+[dependencies]
+log = "0.4.0"
+env_logger = "0.10.0"
+kafka = "0.9.0"
+openssl-sys = "0.9.77"
