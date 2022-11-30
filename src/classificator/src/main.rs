@@ -1,6 +1,4 @@
-#[macro_use]
-extern crate log;
-
+use common::{log, LogLevel, LogFrom, File};
 use std::time::Duration;
 use kafka::{consumer::{Consumer, FetchOffset, GroupOffsetStorage}, producer::{Producer, RequiredAcks, Record}};
 
@@ -12,22 +10,52 @@ fn consume(producer:&mut Producer, consumer:&mut Consumer)
         {
             for m in ms.messages()
             {
-                let path:String = String::from_utf8_lossy(m.value).to_string();
-                if path.contains(".txt")
+                match serde_json::from_str::<File>(&String::from_utf8_lossy(m.value))
                 {
-                    info!("FOUND .TXT FILE AT: {}", path);
-                    producer.send(&Record::from_value("topic_selected_files", path.as_bytes().to_owned())).unwrap();
+                    Ok(file) =>
+                    {
+                        if file.path.contains(".txt")
+                        {
+                            log(producer, LogLevel::INFO, LogFrom::CLASSIFICATOR, format!("FOUND .TXT FILE AT: {}", file.path));
+                            match producer.send(&Record::from_value("topic_selected_files", m.value))
+                            {
+                                Ok(_) => (),
+                                Err(error) =>
+                                {
+                                    log(producer, LogLevel::ERROR, LogFrom::CLASSIFICATOR, format!("CANNOT SEND MESSAGE TO APACHE KAFKA: {}", error.to_string()));
+                                }
+                            }
+                        }
+                    }
+                    Err(error) =>
+                    {
+                        log(producer, LogLevel::ERROR, LogFrom::CLASSIFICATOR, format!("CANNOT PARSE MESSAGE TO FILE STRUCT: {}", error.to_string()));
+                    }
                 }
             }
 
-            consumer.consume_messageset(ms).unwrap();
+            match consumer.consume_messageset(ms)
+            {
+                Ok(_) => (),
+                Err(error) =>
+                {
+                    log(producer, LogLevel::ERROR, LogFrom::CLASSIFICATOR, format!("CANNOT CONSUME MESSAGESET: {}", error.to_string()));
+                }
+            }            
         }
 
-        consumer.commit_consumed().unwrap();
+        match consumer.commit_consumed()
+        {
+            Ok(_) => (),
+            Err(error) =>
+            {
+                log(producer, LogLevel::ERROR, LogFrom::CLASSIFICATOR, format!("CANNOT COMMIT CONSUMED MESSAGESET: {}", error.to_string()));
+            }            
+        }
     }
 }
 
-fn main() 
+fn main()
 {
     let mut producer:Producer = 
     match Producer::from_hosts( vec!("localhost:9092".to_owned()))
@@ -37,7 +65,7 @@ fn main()
             Ok(producer) => producer,
             Err(error) =>
             {
-                panic!("Cannot create Apache Kafka Producer: {}", error.to_string());
+                panic!("CANOOT CREATE APACHE KAFKA PRODUCER: {}", error.to_string());
             } 
         };
 
@@ -51,11 +79,10 @@ fn main()
         Ok(consumer) => consumer,
         Err(error) =>
         {
-            panic!("Cannot create Apache Kafka Consumer: {}", error.to_string())
+            panic!("CANNOT CREATE APACHE KAFKA CONSUMER: {}", error.to_string())
         }
     };
 
-    env_logger::init();
-    info!("STARTING CLASSIFICATOR");
+    log(&mut producer, LogLevel::TRACE, LogFrom::CLASSIFICATOR, "STARTING CLASSIFICATOR".to_string());
     consume(&mut producer, &mut consumer);
 }

@@ -1,11 +1,10 @@
-#[macro_use]
-extern crate log;
-
+use common::{log, LogLevel, LogFrom, File};
 use std::{fs::read_dir, time::Duration};
 use kafka::producer::{Producer, Record, RequiredAcks};
 
 fn scan_directory(directory: String, producer:&mut Producer)
 {
+    log(producer, LogLevel::TRACE, LogFrom::CRAWLER, format!("READING DIRECTORY: {}", directory));
     match read_dir(directory) 
     {
         Result::Ok(paths) => 
@@ -24,31 +23,51 @@ fn scan_directory(directory: String, producer:&mut Producer)
                             {
                                 if metadata.is_dir()
                                 {
+                                    log(producer, LogLevel::TRACE, LogFrom::CRAWLER, format!("FOUND DIRECTORY: {}", str_path));
                                     scan_directory(str_path, producer);
                                 }
                                 else if metadata.is_file()
                                 {
-                                    producer.send(&Record::from_value("topic_files", str_path.as_bytes().to_owned())).unwrap();
+                                    let file:File = File { path: str_path };
+                                    match serde_json::to_string_pretty(&file) 
+                                    {
+                                        Ok(value) =>
+                                        {
+                                            match producer.send(&Record::from_value("topic_files", value))
+                                            {
+                                                Ok(_) => (),
+                                                Err(error) =>
+                                                {
+                                                    log(producer, LogLevel::ERROR, LogFrom::CRAWLER, format!("CANNOT SEND MESSAGE TO APACHE KAFKA: {}", error.to_string()));
+                                                }
+                                            }
+                                        },
+                                        Err(error) =>
+                                        {
+                                            log(producer, LogLevel::ERROR, LogFrom::CRAWLER, format!("CANNOT SERIALIZE FILE STRUCTURE: {}", error.to_string()));
+                                        }
+                                    }
+
                                 }
                             }
 
-                            Result::Err(e) =>
+                            Result::Err(error) =>
                             {
-                                error!("Cannot obtain metadata from dir_entry: {}", e.to_string())
+                                log(producer, LogLevel::ERROR, LogFrom::CRAWLER, format!("CANNOT OBTAIN METADATA FROM DIR_ENTRY: {}", error.to_string()));
                             }
                         }
                     }
 
-                    Result::Err(e) =>
+                    Result::Err(error) =>
                     {
-                        error!("Cannot read directory: {}", e.to_string())
+                        log(producer, LogLevel::ERROR, LogFrom::CRAWLER, format!("CANNOT READ DIRECTORY FROM DIR_ENTRY: {}", error.to_string()));
                     }
                 }
             }
         }
-        Result::Err(e) => 
+        Result::Err(error) => 
         {
-            error!("Cannot read directory: {}", e.to_string())
+            log(producer, LogLevel::ERROR, LogFrom::CRAWLER, format!("CANNOT READ DIRECTORY: {}", error.to_string()));
         }
     }
 }
@@ -63,11 +82,10 @@ fn main()
             Ok(producer) => producer,
             Err(error) =>
             {
-                panic!("Cannot create Apache Kafka Producer: {}", error.to_string());
+                panic!("CANNOT CREATE APACHE KAFKA PRODUCER: {}", error.to_string());
             } 
         };
 
-    env_logger::init();
-    info!("STARTING CRAWLER OVER: {}", "C:/");
+    log(&mut producer, LogLevel::TRACE, LogFrom::CRAWLER, format!("STARTING CRAWLER OVER: {}", "C:/"));
     scan_directory("C:/".to_string(), &mut producer);
 }

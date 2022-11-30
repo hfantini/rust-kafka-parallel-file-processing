@@ -1,9 +1,15 @@
-#[macro_use]
-extern crate log;
+use std::{time::Duration, io::{LineWriter, Write}, fs::File};
+use kafka::{consumer::{Consumer, FetchOffset, GroupOffsetStorage}, producer::{Producer, RequiredAcks}};
+use common::{log, LogLevel, LogFrom, Fragment};
 
-use kafka::{consumer::{Consumer, FetchOffset, GroupOffsetStorage}};
+fn write_line(file: &File, value: String)
+{
+    let line = [value, "\n".to_string()].concat();
+    let mut line_writter = LineWriter::new(file);
+    line_writter.write_all(&line.as_bytes()).unwrap();
+}
 
-fn consume(consumer:&mut Consumer)
+fn consume(producer:&mut Producer, consumer: &mut Consumer, file: &File)
 {
     loop
     {
@@ -11,12 +17,22 @@ fn consume(consumer:&mut Consumer)
         {
             for m in ms.messages()
             {
-                let value:String = String::from_utf8_lossy(m.value).to_string().to_lowercase();
-                let expected:String = "the".to_string();
-                
-                if value == expected
+                match serde_json::from_str::<Fragment>(&String::from_utf8_lossy(m.value))
                 {
-                    info!("Found THE");
+                    Ok(fragment) =>
+                    {
+                        let expected:String = "system".to_string();
+                        if fragment.value.to_lowercase() == expected
+                        {
+                            let line:String = format!("FOUND '{}' WORD @ {} : {} IN FILE -> {}", expected, fragment.line, fragment.pos, fragment.file.path);
+                            log(producer, LogLevel::INFO, LogFrom::FINDER, line.to_owned());
+                            write_line(file, line.to_owned());
+                        }
+                    },
+                    Err(error) =>
+                    {
+                        log(producer, LogLevel::ERROR, LogFrom::FINDER, format!("CANNOT PARSE MESSAGE INTO FRAGMENT STRCUTURE: {}", error.to_string()));
+                    }
                 }
             }
 
@@ -29,20 +45,37 @@ fn consume(consumer:&mut Consumer)
 
 fn main() 
 {
+    env_logger::init();
+
+    let mut producer:Producer = 
+    match Producer::from_hosts( vec!("localhost:9092".to_owned()))
+    .with_ack_timeout(Duration::from_secs(1))
+    .with_required_acks(RequiredAcks::One)
+    .create() 
+    {
+        Ok(producer) => producer,
+        Err(error) =>
+        {
+            panic!("CANOOT CREATE APACHE KAFKA PRODUCER: {}", error.to_string());
+        } 
+    };
+        
     let mut consumer:Consumer = 
     match Consumer::from_hosts(vec!("localhost:9092".to_owned()))
     .with_topic_partitions("topic_words".to_owned(), &[0])
     .with_fallback_offset(FetchOffset::Earliest)
-    .with_group("default2".to_owned())
+    .with_group("default".to_owned())
     .with_offset_storage(GroupOffsetStorage::Kafka)
-    .create() {
-        Ok(consumer) => consumer,
-        Err(error) =>
-        {
-            panic!("Cannot create Apache Kafka Consumer: {}", error.to_string())
-        }
+    .create() 
+    {
+            Ok(consumer) => consumer,
+            Err(error) =>
+            {
+                panic!("Cannot create Apache Kafka Consumer: {}", error.to_string())
+            }
     };
 
-    env_logger::init();
-    consume(&mut consumer);
+    let file = File::create("result.txt").unwrap();
+
+    consume(&mut producer, &mut consumer, &file);
 }
