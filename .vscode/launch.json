@@ -105,14 +105,17 @@
                 "args": [
                     "build",
                     "--bin=finder",
-                    "--package=finder"
+                    "--package=finder"                 
                 ],
                 "filter": {
                     "name": "finder",
                     "kind": "bin"
                 }
             },
-            "args": [],
+            "args": [
+                "result.txt",
+                "as;the"
+            ],
             "cwd": "${workspaceFolder}"
         },
         {

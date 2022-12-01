@@ -1,6 +1,10 @@
+mod args;
+
+use clap::Parser;
 use common::{log, LogLevel, LogFrom, File};
 use std::{fs::read_dir, time::Duration};
 use kafka::producer::{Producer, Record, RequiredAcks};
+use args::Args;
 
 fn scan_directory(directory: String, producer:&mut Producer)
 {
@@ -86,6 +90,9 @@ fn main()
             } 
         };
 
-    log(&mut producer, LogLevel::TRACE, LogFrom::CRAWLER, format!("STARTING CRAWLER OVER: {}", "C:/"));
-    scan_directory("C:/".to_string(), &mut producer);
+    let args:Args = Args::parse();
+    let path = args.path.into_os_string().into_string().unwrap();
+
+    log(&mut producer, LogLevel::TRACE, LogFrom::CRAWLER, format!("STARTING CRAWLER OVER: {path}", ));
+    scan_directory(path, &mut producer);
 }
