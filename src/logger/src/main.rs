@@ -20,19 +20,19 @@ fn consume(consumer: &mut Consumer)
                         {
                             LogLevel::TRACE =>
                             {
-                                trace!("[{}] TRACE -> {}", log_message.from, log_message.message)
+                                trace!("[{} :: {}] TRACE -> {}", log_message.from, log_message.name, log_message.message)
                             },
                             LogLevel::INFO =>
                             {
-                                info!("[{}] INFO -> {}", log_message.from, log_message.message)
+                                info!("[{} :: {}] INFO -> {}", log_message.from, log_message.name, log_message.message)
                             },   
                             LogLevel::WARNING =>
                             {
-                                warn!("[{}] WARN -> {}", log_message.from, log_message.message)
+                                warn!("[{} :: {}] WARN -> {}", log_message.from, log_message.name, log_message.message)
                             },
                             LogLevel::ERROR =>
                             {
-                                error!("[{}] ERROR -> {}", log_message.from, log_message.message)
+                                error!("[{} :: {}] ERROR -> {}", log_message.from, log_message.name, log_message.message)
                             }                                                                     
                         }
                     },
@@ -56,7 +56,7 @@ fn main()
 
     let mut consumer:Consumer = 
     match Consumer::from_hosts(vec!("localhost:9092".to_owned()))
-    .with_topic_partitions("topic_log".to_owned(), &[0])
+    .with_topic("topic_log".to_owned())
     .with_fallback_offset(FetchOffset::Earliest)
     .with_group("default".to_owned())
     .with_offset_storage(GroupOffsetStorage::Kafka)

@@ -19,7 +19,9 @@
                     "kind": "bin"
                 }
             },
-            "args": [],
+            "args": [
+                "CLASSIFICATOR_1"
+            ],
             "cwd": "${workspaceFolder}"
         },
         {
@@ -38,7 +40,9 @@
                     "kind": "bin"
                 }
             },
-            "args": [],
+            "args": [
+                "CLASSIFICATOR_1"
+            ],
             "cwd": "${workspaceFolder}"
         },
         {
@@ -75,7 +79,10 @@
                     "kind": "bin"
                 }
             },
-            "args": [],
+            "args": [
+                "CLAWLER_1",
+                "X:/TEST CHAMBER"
+            ],
             "cwd": "${workspaceFolder}"
         },
         {
@@ -114,7 +121,7 @@
             },
             "args": [
                 "result.txt",
-                "as;the"
+                "unix;linux;system;half;life;admin;password"
             ],
             "cwd": "${workspaceFolder}"
         },

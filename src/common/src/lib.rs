@@ -15,9 +15,9 @@ pub use log_message::LogMessage;
 pub use file::File;
 pub use fragment::Fragment;
 
-pub fn log(producer: &mut Producer, level:LogLevel, from:LogFrom, message:String)
+pub fn log(producer: &mut Producer, level:LogLevel, from:LogFrom, name:String, message:String)
 {
-    let message:LogMessage = LogMessage { level: level, from: from, message: message };
+    let message:LogMessage = LogMessage { level: level, from: from, name, message: message };
     match serde_json::to_string_pretty(&message) 
     {
         Ok(value) =>

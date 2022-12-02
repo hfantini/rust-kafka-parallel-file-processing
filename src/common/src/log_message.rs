@@ -6,5 +6,6 @@ pub struct LogMessage
 {
     pub level: LogLevel,
     pub from: LogFrom,
+    pub name: String,
     pub message: String
 }

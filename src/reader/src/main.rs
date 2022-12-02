@@ -1,14 +1,21 @@
+mod args;
+
 use common::{log, LogLevel, LogFrom, Fragment};
 use std::io::BufRead;
 use std::str::FromStr;
+use std::sync::Mutex;
 use std::{fs::File, io::BufReader};
 use std::time::Duration;
 use kafka::producer::Record;
 use kafka::{consumer::{Consumer, FetchOffset, GroupOffsetStorage}, producer::{Producer, RequiredAcks}};
+use clap::Parser;
+use args::Args;
+
+static NAME:Mutex<String> = Mutex::new(String::new());
 
 fn read(producer: &mut Producer, m_file:&common::File)
 {
-    log(producer, LogLevel::INFO, LogFrom::READER, format!("READING FILE: {}", m_file.path));
+    log(producer, LogLevel::INFO, LogFrom::READER, NAME.lock().unwrap().to_owned(), format!("READING FILE: {}", m_file.path));
     match File::open(&m_file.path,) 
     {
         Ok(file) =>
@@ -18,8 +25,14 @@ fn read(producer: &mut Producer, m_file:&common::File)
 
             for line in reader.lines()
             {
-                let line = line.unwrap_or_default();
-                let splitted_line = line.split(" ");
+                if line.is_err()
+                {
+                    log(producer, LogLevel::ERROR, LogFrom::READER, NAME.lock().unwrap().to_owned(), format!("CANNOT PARSE LINE {} OF FILE {}: {}", line_counter, m_file.path, line.unwrap_err()));
+                    continue;
+                }
+
+                let string_line = line.unwrap();
+                let splitted_line = string_line.split(" ");
 
                 for fragment_arr in splitted_line
                 {
@@ -27,7 +40,12 @@ fn read(producer: &mut Producer, m_file:&common::File)
 
                     for word in word_arr
                     {
-                        match serde_json::to_string_pretty( &Fragment { file: m_file.to_owned(), value: String::from_str(word).unwrap(), line: line_counter, pos: line.find(word).map(|s| s).unwrap() + 1 } )
+                        if word == ""
+                        {
+                            continue;
+                        }
+
+                        match serde_json::to_string_pretty( &Fragment { file: m_file.to_owned(), value: String::from_str(word).unwrap(), line: line_counter} )
                         {
                             Ok(value) =>
                             {
@@ -36,13 +54,13 @@ fn read(producer: &mut Producer, m_file:&common::File)
                                     Ok(_) => (),
                                     Err(error) =>
                                     {
-                                        log(producer, LogLevel::ERROR, LogFrom::READER, format!("CANNOT SEND MESSAGE TO APACHE KAFKA: {}", error.to_string()));
+                                        log(producer, LogLevel::ERROR, LogFrom::READER, NAME.lock().unwrap().to_owned(), format!("CANNOT SEND MESSAGE TO APACHE KAFKA: {}", error.to_string()));
                                     }
                                 }
                             },
                             Err(error) =>
                             {
-                                log(producer, LogLevel::ERROR, LogFrom::READER, format!("CANNOT SERIALIZE DATA INTO FRAGMENT STRUCT: {}", error.to_string()));
+                                log(producer, LogLevel::ERROR, LogFrom::READER, NAME.lock().unwrap().to_owned(), format!("CANNOT SERIALIZE DATA INTO FRAGMENT STRUCT: {}", error.to_string()));
                             }                            
                         }
                     }
@@ -53,7 +71,7 @@ fn read(producer: &mut Producer, m_file:&common::File)
         }
         Err(error) =>
         {
-            log(producer, LogLevel::ERROR, LogFrom::READER, format!("CANNOT READ FILE {}: {}", m_file.path, error.to_string()));
+            log(producer, LogLevel::ERROR, LogFrom::READER, NAME.lock().unwrap().to_owned(), format!("CANNOT READ FILE {}: {}", m_file.path, error.to_string()));
         }
     }
 }
@@ -74,7 +92,7 @@ fn consume(producer:&mut Producer, consumer:&mut Consumer)
                     },
                     Err(error) =>
                     {
-                        log(producer, LogLevel::ERROR, LogFrom::READER, format!("CANNOT PARSE MESSAGE TO FILE STRUCT: {}", error.to_string()));
+                        log(producer, LogLevel::ERROR, LogFrom::READER, NAME.lock().unwrap().to_owned(), format!("CANNOT PARSE MESSAGE TO FILE STRUCT: {}", error.to_string()));
                     }
                 }
             }
@@ -84,7 +102,7 @@ fn consume(producer:&mut Producer, consumer:&mut Consumer)
                 Ok(_) => (),
                 Err(error) =>
                 {
-                    log(producer, LogLevel::ERROR, LogFrom::READER, format!("CANNOT CONSUME MESSAGESET: {}", error.to_string()));
+                    log(producer, LogLevel::ERROR, LogFrom::READER, NAME.lock().unwrap().to_owned(), format!("CANNOT CONSUME MESSAGESET: {}", error.to_string()));
                 }
             };
         }
@@ -94,7 +112,7 @@ fn consume(producer:&mut Producer, consumer:&mut Consumer)
             Ok(_) => (),
             Err(error) =>
             {
-                log(producer, LogLevel::ERROR, LogFrom::READER, format!("CANNOT COMMIT CONSUMED MESSAGESET: {}", error.to_string()));
+                log(producer, LogLevel::ERROR, LogFrom::READER, NAME.lock().unwrap().to_owned(), format!("CANNOT COMMIT CONSUMED MESSAGESET: {}", error.to_string()));
             }   
         }
     }
@@ -104,7 +122,7 @@ fn main()
 {
     let mut producer:Producer = 
     match Producer::from_hosts( vec!("localhost:9092".to_owned()))
-        .with_ack_timeout(Duration::from_secs(1))
+        .with_ack_timeout(Duration::from_secs(60))
         .with_required_acks(RequiredAcks::One)
         .create() {
             Ok(producer) => producer,
@@ -116,7 +134,7 @@ fn main()
 
     let mut consumer:Consumer = 
     match Consumer::from_hosts(vec!("localhost:9092".to_owned()))
-    .with_topic_partitions("topic_selected_files".to_owned(), &[0])
+    .with_topic("topic_selected_files".to_owned())
     .with_fallback_offset(FetchOffset::Earliest)
     .with_group("default".to_owned())
     .with_offset_storage(GroupOffsetStorage::Kafka)
@@ -127,6 +145,9 @@ fn main()
             panic!("Cannot create Apache Kafka Consumer: {}", error.to_string())
         }
     };
+
+    let args:Args = Args::parse();
+    NAME.lock().unwrap().push_str(&args.name);
 
     consume(&mut producer, &mut consumer);
     

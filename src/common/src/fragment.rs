@@ -6,6 +6,5 @@ pub struct Fragment
 {
     pub file: File,
     pub value: String,
-    pub line: i64,
-    pub pos: usize
+    pub line: i64
 }
